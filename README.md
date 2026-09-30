@@ -33,8 +33,8 @@ npm run search:setup
 
 Create OAuth applications before login:
 
-- Google Cloud web client callback: `http://localhost:4000/api/auth/google/callback`; origin: `http://localhost:5173`.
-- Slack app callback: `http://localhost:4000/api/integrations/slack/callback`; add `incoming-webhook` scope and enable OAuth.
+- Google Cloud web client callback: `http://localhost:4000/api/auth/google/callback`. This server-side flow does not require an Authorized JavaScript origin.
+- Slack local testing uses the single-origin HTTPS tunnel in [docs/local-https.md](docs/local-https.md); add only the `incoming-webhook` scope.
 
 Set `PROVISION_OWNER_EMAIL` to the same Google email, then create exactly two durable Ethereal accounts (the generated passwords are AES-GCM encrypted before storage):
 
@@ -79,7 +79,7 @@ Google, Slack and Ethereal require credentials and user consent; automated tests
 
 1. Sign in through Google and confirm `/api/me` returns only your profile.
 2. Run the two-sender provisioning script and confirm no password appears in `/api/senders` or browser network responses.
-3. Connect Slack, choose a channel, set one sender cap to 2, and schedule `sample-leads.csv` (3 rows). Confirm exactly one threshold message and a third email delayed to the next actual UTC hour.
+3. Connect Slack, choose only the test channel, run `npm run demo:configure-rate-limit`, and schedule `slack-rate-limit-demo.csv` (3 rows). The helper refuses to change the sender if its current-hour quota is non-zero and never clears counters. Confirm exactly one threshold message and a third email delayed to the next actual UTC hour.
 4. Open each confirmed delivery's Ethereal preview link and search for recipient, subject and body text.
 5. Restart `worker` while a future job exists and confirm it remains in Bull Board and later sends.
 
@@ -96,13 +96,13 @@ An always-on Compose stack, persistent volumes, separate API/worker restarts, Ca
 | Crash-safe queue publication | `apps/api/src/outbox.ts`, stale-claim/restart integration test | Implemented |
 | Shared concurrency/rate limits | Redis Lua in `packages/shared/src/rate-limit.ts`, racing-worker integration tests | Implemented |
 | SMTP retries/ambiguity/idempotency | `apps/worker/src/processors.ts`, policy tests, `npm run smoke:ethereal` | Verified with real Ethereal acceptance and preview |
-| Google OIDC/session ownership | `apps/api/src/auth.ts`, protected/owner-scoped routes | Implemented; live consent check pending |
-| Slack OAuth/threshold dedupe | `apps/api/src/slack.ts`, worker notification event, reconnect test | Implemented; live Slack check pending |
+| Google OIDC/session ownership | `apps/api/src/auth.ts`, protected/owner-scoped routes | Live verified through real Google consent |
+| Slack OAuth/threshold dedupe | `apps/api/src/slack.ts`, user-bound OAuth-state tests, worker notification event, reconnect test | Implemented and automatically tested; live Slack consent pending |
 | Elasticsearch/versioned indexing | setup/reindex scripts, index worker, owner-filter test | Verified on Elasticsearch 9.1.4 |
 | Bull Board admin authorization | `/admin/queues` + `ADMIN_EMAILS` middleware | Implemented |
 | Dashboard/CSV/timezone/pagination | `apps/web`, parser tests | Implemented; Figma pixel match blocked by inaccessible frames |
 | Local/production operations | both Compose files, Dockerfile, Caddyfile, health endpoints | Implemented |
 
-Final automated result: **15/15 tests passed**, all workspace type checks and lint passed, production builds passed, the production Docker image built successfully, dependency audit reported **0 vulnerabilities**, and readiness returned all three dependencies healthy. Google login and Slack posting remain credential/consent-blocked; they are implemented but not claimed as live-verified.
+The current verification commands and evidence are tracked in [docs/requirements-checklist.md](docs/requirements-checklist.md). Real Google login, Ethereal acceptance/preview, Elasticsearch, and service readiness have been live verified. Slack posting remains credential/consent-blocked and is not claimed as live-verified.
 
 See [docs/requirements-checklist.md](docs/requirements-checklist.md) for the concise checklist, [docs/demo-script.md](docs/demo-script.md) for a sub-five-minute walkthrough, and [docs/tradeoffs.md](docs/tradeoffs.md) for review-ready design decisions.

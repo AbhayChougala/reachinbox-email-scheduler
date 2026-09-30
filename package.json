@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "concurrently -n web,api,worker -c cyan,green,magenta \"npm run dev -w @reachinbox/web\" \"npm run dev -w @reachinbox/api\" \"npm run dev -w @reachinbox/worker\"",
+    "dev:https": "tsx scripts/dev-https.ts",
     "build": "npm run build -w @reachinbox/shared && npm run build -w @reachinbox/api && npm run build -w @reachinbox/worker && npm run build -w @reachinbox/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --max-warnings=0",
@@ -21,6 +22,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed:senders": "tsx scripts/provision-ethereal.ts",
+    "db:adopt-senders": "tsx scripts/adopt-seeded-senders.ts",
+    "demo:configure-rate-limit": "tsx scripts/configure-rate-limit-demo.ts",
     "smoke:ethereal": "tsx scripts/smoke-ethereal.ts",
     "search:setup": "tsx scripts/setup-elasticsearch.ts",
     "search:reindex": "tsx scripts/reindex-elasticsearch.ts"

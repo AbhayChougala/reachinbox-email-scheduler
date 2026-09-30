@@ -33,7 +33,7 @@ export function createApp(redis: Redis, elastic: ElasticsearchClient) {
     secret: env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', secure: env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60_000 }
+    cookie: { httpOnly: true, sameSite: 'lax', secure: new URL(env.PUBLIC_ORIGIN).protocol === 'https:', maxAge: 7 * 24 * 60 * 60_000 }
   }));
 
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
@@ -94,7 +94,7 @@ export function createApp(redis: Redis, elastic: ElasticsearchClient) {
     const integration = await prisma.slackIntegration.findUnique({ where: { ownerId: req.session.userId }, select: { enabled: true, teamName: true, channelName: true } });
     res.json({ integration });
   });
-  app.get('/api/integrations/slack/connect', requireUser, beginSlack);
+  app.get('/api/integrations/slack/connect', requireUser, (req, res, next) => void beginSlack(req, res).catch(next));
   app.get('/api/integrations/slack/callback', (req, res, next) => void finishSlack(req, res).catch(next));
   app.delete('/api/integrations/slack', requireUser, async (req, res) => {
     await prisma.slackIntegration.updateMany({ where: { ownerId: req.session.userId }, data: { enabled: false } });

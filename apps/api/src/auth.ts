@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import * as oidc from 'openid-client';
 import { getConfig, prisma } from '@reachinbox/shared';
+import { logger } from './logger.js';
+import { saveSession, sessionFingerprint } from './session.js';
 
 let oidcConfig: oidc.Configuration | undefined;
 
@@ -23,6 +25,11 @@ export async function beginGoogle(req: Request, res: Response): Promise<void> {
   const codeVerifier = oidc.randomPKCECodeVerifier();
   const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
   req.session.oauth = { state, nonce, codeVerifier, createdAt: Date.now() };
+  await saveSession(req);
+  logger.info({
+    authFlow: 'google', phase: 'start', sessionIdHash: sessionFingerprint(req),
+    hostname: req.hostname, protocol: req.protocol, stateSaved: true
+  }, 'OAuth session prepared');
   const url = oidc.buildAuthorizationUrl(await config(), {
     redirect_uri: env.GOOGLE_REDIRECT_URI,
     scope: 'openid email profile',
@@ -39,8 +46,24 @@ export async function beginGoogle(req: Request, res: Response): Promise<void> {
 export async function finishGoogle(req: Request, res: Response): Promise<void> {
   const env = getConfig();
   const pending = req.session.oauth;
-  if (!pending || Date.now() - pending.createdAt > 10 * 60_000) {
+  const ageMs = pending ? Date.now() - Number(pending.createdAt) : null;
+  logger.info({
+    authFlow: 'google', phase: 'callback', sessionIdHash: sessionFingerprint(req),
+    hostname: req.hostname, protocol: req.protocol, cookiePresent: Boolean(req.get('cookie')),
+    pendingPresent: Boolean(pending), ageMs,
+    returnedStatePresent: typeof req.query.state === 'string',
+    stateMatches: Boolean(pending && req.query.state === pending.state)
+  }, 'OAuth callback session check');
+  if (!pending) {
+    res.status(400).send('Google OAuth session is missing. Start sign-in again from the same HTTPS application URL.');
+    return;
+  }
+  if (!Number.isFinite(ageMs) || ageMs! < 0 || ageMs! > 10 * 60_000) {
     res.status(400).send('OAuth state expired. Start sign-in again.');
+    return;
+  }
+  if (typeof req.query.state !== 'string' || req.query.state !== pending.state) {
+    res.status(400).send('Invalid Google OAuth state. Start sign-in again.');
     return;
   }
   const currentUrl = new URL(req.originalUrl, env.PUBLIC_ORIGIN);
@@ -71,6 +94,7 @@ export async function finishGoogle(req: Request, res: Response): Promise<void> {
   });
   await new Promise<void>((resolve, reject) => req.session.regenerate((error) => error ? reject(error) : resolve()));
   req.session.userId = user.id;
+  await saveSession(req);
   res.redirect(env.WEB_ORIGIN);
 }
 

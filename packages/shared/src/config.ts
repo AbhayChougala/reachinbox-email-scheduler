@@ -19,8 +19,13 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
-  SLACK_CLIENT_ID: z.string().min(1),
-  SLACK_CLIENT_SECRET: z.string().min(1),
+  SLACK_CLIENT_ID: z.string().min(1)
+    .refine((value) => value === value.trim(), 'must not contain surrounding whitespace')
+    .refine(placeholder, 'must not be a placeholder')
+    .regex(/^\d+\.\d+$/, 'must be a Slack Client ID, not an App ID or token'),
+  SLACK_CLIENT_SECRET: z.string().min(1)
+    .refine((value) => value === value.trim(), 'must not contain surrounding whitespace')
+    .refine(placeholder, 'must not be a placeholder'),
   SLACK_REDIRECT_URI: z.string().url(),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(10),
   OUTBOX_POLL_MS: z.coerce.number().int().min(500).default(5000),

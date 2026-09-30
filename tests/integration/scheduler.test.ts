@@ -70,10 +70,14 @@ integration('persistent scheduling and concurrency', () => {
     const message = await prisma.emailMessage.findFirstOrThrow({ where: { ownerId } });
     await prisma.outboxEvent.updateMany({ where: { kind: 'EMAIL_ENQUEUE', aggregateId: message.id }, data: { status: 'PROCESSING', claimedAt: new Date(Date.now() - 120_000) } });
     const stop = startOutboxDispatcher(redis);
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-    await stop();
     const queueA = new Queue(EMAIL_QUEUE, { connection: redis });
-    expect(await queueA.getJob(emailJobId(message.id))).toBeTruthy();
+    let recovered = await queueA.getJob(emailJobId(message.id));
+    for (let attempt = 0; !recovered && attempt < 70; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      recovered = await queueA.getJob(emailJobId(message.id));
+    }
+    await stop();
+    expect(recovered).toBeTruthy();
     await queueA.close();
     const queueB = new Queue(EMAIL_QUEUE, { connection: redis });
     expect(await queueB.getJob(emailJobId(message.id))).toBeTruthy();

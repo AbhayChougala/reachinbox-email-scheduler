@@ -9,6 +9,6 @@ declare module 'express-session' {
       codeVerifier: string;
       createdAt: number;
     };
-    slackOauth?: { state: string; createdAt: number };
+    slackOauth?: { state: string; userId: string; createdAt: number };
   }
 }

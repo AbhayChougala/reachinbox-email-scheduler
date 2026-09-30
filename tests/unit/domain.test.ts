@@ -3,6 +3,8 @@ import { decryptSecret, encryptSecret, fingerprint, normalizeAndValidateRecipien
 import { parseLeadText } from '../../apps/web/src/leads.ts';
 import { buildEmailSearch } from '../../apps/api/src/search.ts';
 import { classifySmtpError } from '../../apps/worker/src/processors.ts';
+import { canonicalPublicUrl } from '../../apps/web/src/origin.ts';
+import { formatSlackChannel } from '../../apps/web/src/display.ts';
 
 describe('recipient ingestion', () => {
   it('parses common CSV headers and reports invalid/duplicate leads', () => {
@@ -55,5 +57,23 @@ describe('SMTP ambiguity policy', () => {
     expect(classifySmtpError({ code: 'ECONNREFUSED' })).toBe('retryable');
     expect(classifySmtpError({ responseCode: 550 })).toBe('permanent');
     expect(classifySmtpError({ code: 'ETIMEDOUT' })).toBe('ambiguous');
+  });
+});
+
+describe('HTTPS development origin', () => {
+  it('redirects loopback navigation to the canonical tunnel and leaves other hosts alone', () => {
+    const origin = new URL('https://active-tunnel.trycloudflare.com');
+    expect(canonicalPublicUrl('localhost:5173', '/api/auth/google', origin)).toBe('https://active-tunnel.trycloudflare.com/api/auth/google');
+    expect(canonicalPublicUrl('127.0.0.1:5173', '/', origin)).toBe('https://active-tunnel.trycloudflare.com/');
+    expect(canonicalPublicUrl('active-tunnel.trycloudflare.com', '/', origin)).toBeNull();
+    expect(canonicalPublicUrl('untrusted.example', '/', origin)).toBeNull();
+  });
+});
+
+describe('Slack destination display', () => {
+  it('renders exactly one leading hash for provider channel names', () => {
+    expect(formatSlackChannel('scheduler-alert')).toBe('#scheduler-alert');
+    expect(formatSlackChannel('#scheduler-alert')).toBe('#scheduler-alert');
+    expect(formatSlackChannel('##scheduler-alert')).toBe('#scheduler-alert');
   });
 });
