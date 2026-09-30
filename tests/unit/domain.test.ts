@@ -4,7 +4,7 @@ import { parseLeadText } from '../../apps/web/src/leads.ts';
 import { buildEmailSearch } from '../../apps/api/src/search.ts';
 import { classifySmtpError } from '../../apps/worker/src/processors.ts';
 import { canonicalPublicUrl } from '../../apps/web/src/origin.ts';
-import { formatSlackChannel } from '../../apps/web/src/display.ts';
+import { currentEmailResults, emailTimestampForTab, emailViewKey, formatSlackChannel } from '../../apps/web/src/display.ts';
 
 describe('recipient ingestion', () => {
   it('parses common CSV headers and reports invalid/duplicate leads', () => {
@@ -47,7 +47,33 @@ describe('tenant search isolation', () => {
     const request = buildEmailSearch({ ownerId: 'owner-a', tab: 'sent', q: 'Ada', page: 2, pageSize: 25 });
     expect(request.from).toBe(25);
     expect(request.query.bool.filter).toContainEqual({ term: { ownerId: 'owner-a' } });
-    expect(request.query.bool.filter).toContainEqual({ terms: { status: ['SENT', 'FAILED', 'AMBIGUOUS'] } });
+    expect(request.query.bool.filter).toContainEqual({ terms: { status: ['SENT', 'FAILED'] } });
+    expect(buildEmailSearch({ ownerId: 'owner-a', tab: 'scheduled', q: 'Ada', page: 1, pageSize: 25 }).query.bool.filter)
+      .toContainEqual({ terms: { status: ['SCHEDULED', 'QUEUED', 'SENDING'] } });
+  });
+});
+
+describe('dashboard timestamps', () => {
+  const item = { status: 'SENT', effectiveScheduledAt: '2026-10-01T10:00:00.000Z', sentAt: '2026-10-01T10:01:00.000Z' };
+
+  it('uses effective time for scheduled rows and actual delivery time for sent rows', () => {
+    expect(emailTimestampForTab('scheduled', item)).toBe(item.effectiveScheduledAt);
+    expect(emailTimestampForTab('sent', item)).toBe(item.sentAt);
+  });
+
+  it('does not fabricate a sent time for failed rows or sent rows missing confirmation', () => {
+    expect(emailTimestampForTab('sent', { ...item, status: 'FAILED', sentAt: null })).toBeNull();
+    expect(emailTimestampForTab('sent', { ...item, sentAt: null })).toBeNull();
+  });
+});
+
+describe('dashboard result identity', () => {
+  it('does not expose a response from a previous tab, search, or page', () => {
+    const scheduled = { key: emailViewKey('scheduled', 'rate-demo', 1), items: ['queued'] };
+    expect(currentEmailResults(emailViewKey('sent', 'rate-demo', 1), scheduled)).toBeNull();
+    expect(currentEmailResults(emailViewKey('scheduled', 'alex', 1), scheduled)).toBeNull();
+    expect(currentEmailResults(emailViewKey('scheduled', 'rate-demo', 2), scheduled)).toBeNull();
+    expect(currentEmailResults(emailViewKey('scheduled', 'rate-demo', 1), scheduled)).toBe(scheduled);
   });
 });
 

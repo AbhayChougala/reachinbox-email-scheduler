@@ -23,6 +23,8 @@ Status meanings:
 | Production Dockerfile, private service network, volumes, Caddy HTTPS | Yes | Build verification | **Blocked:** deploy target domain/host are not selected; no paid resource was created |
 | Pixel-perfect Figma fidelity | Partial | No | **Blocked:** the available public reference exposes only the cover, not dashboard frames |
 | Search control icon/text spacing and responsive toolbar | Yes | Yes | **Live visual fixture verified:** empty and typed text do not overlap; focus indication is visible and controls wrap at 375 px |
+| Tab-scoped status/search results and truthful timestamps | Yes | Yes | **Live API verified:** Scheduled and Sent Elasticsearch filters are disjoint; stale tab/query/page responses are suppressed; `SENT` uses actual `sentAt` and `FAILED` displays no fabricated time |
+| Google Compute Engine production deployment | Prepared | Compose/build checks | **Blocked:** local Cloud authentication is unavailable; Free Trial status/remaining credit and an account-controlled free hostname must be confirmed before provisioning |
 
 ## Figma evidence still needed
 

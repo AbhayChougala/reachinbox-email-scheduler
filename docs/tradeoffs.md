@@ -2,7 +2,7 @@
 
 ## Delivery semantics
 
-The design chooses at-most-once behavior after an ambiguous SMTP outcome. It avoids the more harmful default of retrying an email that the SMTP server may already have accepted. `AMBIGUOUS` is visible in the sent tab for manual review. This is not unconditional exactly-once delivery; SMTP has no transaction coordinated with PostgreSQL.
+The design chooses at-most-once behavior after an ambiguous SMTP outcome. It avoids the more harmful default of retrying an email that the SMTP server may already have accepted. `AMBIGUOUS` remains preserved in PostgreSQL and operational tooling, but the assignment's Sent tab intentionally contains only `SENT` and `FAILED`; there is no dedicated ambiguous-outcome UI yet. This is not unconditional exactly-once delivery; SMTP has no transaction coordinated with PostgreSQL.
 
 ## Scheduling and limits
 

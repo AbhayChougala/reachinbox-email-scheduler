@@ -1,7 +1,7 @@
 import { Client } from '@elastic/elasticsearch';
 import { getConfig } from '../packages/shared/src/index.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 const env = getConfig();
 const client = new Client({ node: env.ELASTICSEARCH_URL });
 if (!(await client.indices.exists({ index: env.ELASTICSEARCH_INDEX }))) {

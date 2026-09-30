@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Bell, Box, Check, ChevronLeft, ChevronRight, Clock3, ExternalLink, Inbox, Link2, LoaderCircle, LogOut, Mail, Plus, Search, Send, Upload, X } from 'lucide-react';
-import { formatSlackChannel } from './display';
+import { currentEmailResults, emailTimestampForTab, emailViewKey, formatSlackChannel } from './display';
 import { parseLeadText } from './leads';
 import './index.css';
 
@@ -9,6 +9,8 @@ type User = { id: string; name: string; email: string; avatarUrl?: string; isAdm
 type SenderAccount = { id: string; name: string; email: string; minIntervalMs: number; hourlyLimit: number };
 type EmailItem = { id: string; recipient: string; subject: string; body: string; status: string; effectiveScheduledAt: string; sentAt?: string; previewUrl?: string; deferralReason?: string; lastError?: string };
 type Slack = { enabled: boolean; teamName: string; channelName: string } | null;
+type EmailView = { tab: 'scheduled' | 'sent'; query: string; page: number };
+type EmailResults = { key: string; items: EmailItem[]; total: number; error: string; loading: boolean };
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'include', ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
@@ -103,30 +105,46 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
 function Dashboard({ user }: { user: User }) {
   const [senders, setSenders] = useState<SenderAccount[]>([]);
   const [tab, setTab] = useState<'scheduled' | 'sent'>('scheduled');
-  const [items, setItems] = useState<EmailItem[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [results, setResults] = useState<EmailResults | null>(null);
+  const requestSequence = useRef(0);
   const [compose, setCompose] = useState(false);
   const [toast, setToast] = useState('');
   const [slack, setSlack] = useState<Slack>(null);
   const pageSize = 25;
+  const view: EmailView = { tab, query, page };
+  const viewKey = emailViewKey(tab, query, page);
+  const currentResults = currentEmailResults(viewKey, results);
+  const items = currentResults?.items ?? [];
+  const total = currentResults?.total ?? 0;
+  const loading = currentResults?.loading ?? true;
+  const error = currentResults?.error ?? '';
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const initials = useMemo(() => user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(), [user.name]);
 
-  async function load() {
-    setLoading(true); setError('');
+  async function load(target: EmailView, signal?: AbortSignal) {
+    const key = emailViewKey(target.tab, target.query, target.page);
+    const sequence = ++requestSequence.current;
+    setResults((previous) => previous?.key === key
+      ? { ...previous, error: '', loading: true }
+      : { key, items: [], total: 0, error: '', loading: true });
     try {
-      const data = await api<{ items: EmailItem[]; total: number }>(`/api/emails?tab=${tab}&q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}`);
-      setItems(data.items); setTotal(data.total);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not load email index'); }
-    finally { setLoading(false); }
+      const data = await api<{ items: EmailItem[]; total: number }>(`/api/emails?tab=${target.tab}&q=${encodeURIComponent(target.query)}&page=${target.page}&pageSize=${pageSize}`, { signal });
+      if (sequence === requestSequence.current) setResults({ key, items: data.items, total: data.total, error: '', loading: false });
+    } catch (e) {
+      if (signal?.aborted || sequence !== requestSequence.current) return;
+      setResults({ key, items: [], total: 0, error: e instanceof Error ? e.message : 'Could not load email index', loading: false });
+    }
   }
   useEffect(() => { void Promise.all([api<{ senders: SenderAccount[] }>('/api/senders').then((d) => setSenders(d.senders)), api<{ integration: Slack }>('/api/integrations/slack').then((d) => setSlack(d.integration))]); }, []);
-  useEffect(() => { void load(); const timer = setInterval(() => void load(), 10_000); return () => clearInterval(timer); }, [tab, query, page]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(view, controller.signal);
+    const timer = setInterval(() => void load(view, controller.signal), 10_000);
+    return () => { controller.abort(); clearInterval(timer); };
+  }, [tab, query, page]);
   useEffect(() => { const timer = setTimeout(() => { setPage(1); setQuery(search); }, 300); return () => clearTimeout(timer); }, [search]);
 
   return <div className="min-h-screen bg-[#f3f2ee] lg:grid lg:grid-cols-[248px_1fr]">
@@ -140,12 +158,12 @@ function Dashboard({ user }: { user: User }) {
         {toast && <div className="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 flex gap-2"><Check size={19} /> {toast}</div>}
         <div className="flex flex-col xl:flex-row gap-4 justify-between xl:items-center mb-5"><div className="inline-flex bg-[#e8e6df] rounded-xl p-1 self-start"><button onClick={() => { setTab('scheduled'); setPage(1); }} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${tab === 'scheduled' ? 'bg-white shadow-sm' : 'text-[#77746d]'}`}><Clock3 size={16} /> Scheduled emails</button><button onClick={() => { setTab('sent'); setPage(1); }} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${tab === 'sent' ? 'bg-white shadow-sm' : 'text-[#77746d]'}`}><Send size={16} /> Sent emails</button></div><div className="flex w-full flex-wrap items-center gap-3 xl:w-auto"><SearchField value={search} onChange={setSearch} />{slack?.enabled ? <button onClick={() => void api('/api/integrations/slack', { method: 'DELETE' }).then(() => setSlack(null))} className="flex max-w-full min-w-0 items-center gap-2 rounded-xl border border-[#d7d4cc] bg-white px-4 py-2.5 text-sm font-semibold"><Bell className="shrink-0" size={16} /> <span className="min-w-0 truncate">{slack.teamName} · {formatSlackChannel(slack.channelName)}</span> <X className="shrink-0" size={14} /></button> : <a href="/api/integrations/slack/connect" className="rounded-xl border border-[#d7d4cc] bg-white px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2"><Link2 size={16} /> Connect Slack</a>}</div></div>
         <div className="rounded-2xl bg-white border border-[#dfddd6] overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,.03)]">
-          {error ? <div className="p-10 text-center"><div className="size-11 rounded-full bg-red-50 text-red-600 grid place-items-center mx-auto mb-3"><X /></div><h3 className="font-semibold">Search unavailable</h3><p className="text-sm text-[#77746d] mt-1">{error}</p><button onClick={() => void load()} className="mt-4 text-sm font-bold underline">Try again</button></div> : loading && !items.length ? <div className="p-16 grid place-items-center text-[#77746d]"><LoaderCircle className="animate-spin mb-3" />Loading indexed emails…</div> : !items.length ? <div className="p-16 text-center"><div className="size-12 rounded-full bg-[#efeee9] grid place-items-center mx-auto mb-4"><Mail size={21} /></div><h3 className="font-semibold">{query ? 'No matching emails' : `No ${tab} emails yet`}</h3><p className="text-sm text-[#77746d] mt-1">{query ? 'Try a different Elasticsearch query.' : tab === 'scheduled' ? 'Compose a campaign to place work in the queue.' : 'Confirmed deliveries will appear here.'}</p></div> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-[#faf9f6] text-[11px] uppercase tracking-[.1em] text-[#85817a] border-b border-[#e5e3dd]"><tr><th className="px-5 py-4">Recipient</th><th className="px-5 py-4">Subject</th><th className="px-5 py-4">{tab === 'sent' ? 'Sent at' : 'Effective time'}</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Proof</th></tr></thead><tbody className="divide-y divide-[#eeece6]">{items.map((item) => <tr key={item.id} className="hover:bg-[#faf9f6]"><td className="px-5 py-4 text-sm font-medium">{item.recipient}</td><td className="px-5 py-4"><div className="text-sm max-w-xs truncate">{item.subject}</div>{(item.deferralReason || item.lastError) && <div className="text-xs text-[#8a867f] max-w-xs truncate mt-1">{item.deferralReason ?? item.lastError}</div>}</td><td className="px-5 py-4 text-sm text-[#69665f] whitespace-nowrap">{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(tab === 'sent' ? item.sentAt ?? item.effectiveScheduledAt : item.effectiveScheduledAt))}</td><td className="px-5 py-4"><Status status={item.status} /></td><td className="px-5 py-4 text-right">{item.previewUrl ? <a className="inline-flex gap-1 text-sm font-semibold underline" href={item.previewUrl} target="_blank" rel="noreferrer">Preview <ExternalLink size={14} /></a> : <span className="text-[#aaa69e]">—</span>}</td></tr>)}</tbody></table></div>}
+          {error ? <div className="p-10 text-center"><div className="size-11 rounded-full bg-red-50 text-red-600 grid place-items-center mx-auto mb-3"><X /></div><h3 className="font-semibold">Search unavailable</h3><p className="text-sm text-[#77746d] mt-1">{error}</p><button onClick={() => void load(view)} className="mt-4 text-sm font-bold underline">Try again</button></div> : loading && !items.length ? <div className="p-16 grid place-items-center text-[#77746d]"><LoaderCircle className="animate-spin mb-3" />Loading indexed emails…</div> : !items.length ? <div className="p-16 text-center"><div className="size-12 rounded-full bg-[#efeee9] grid place-items-center mx-auto mb-4"><Mail size={21} /></div><h3 className="font-semibold">{query ? 'No matching emails' : `No ${tab} emails yet`}</h3><p className="text-sm text-[#77746d] mt-1">{query ? 'Try a different Elasticsearch query.' : tab === 'scheduled' ? 'Compose a campaign to place work in the queue.' : 'Confirmed deliveries will appear here.'}</p></div> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-[#faf9f6] text-[11px] uppercase tracking-[.1em] text-[#85817a] border-b border-[#e5e3dd]"><tr><th className="px-5 py-4">Recipient</th><th className="px-5 py-4">Subject</th><th className="px-5 py-4">{tab === 'sent' ? 'Sent at' : 'Effective time'}</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Proof</th></tr></thead><tbody className="divide-y divide-[#eeece6]">{items.map((item) => { const timestamp = emailTimestampForTab(tab, item); return <tr key={item.id} className="hover:bg-[#faf9f6]"><td className="px-5 py-4 text-sm font-medium">{item.recipient}</td><td className="px-5 py-4"><div className="text-sm max-w-xs truncate">{item.subject}</div>{(item.deferralReason || item.lastError) && <div className="text-xs text-[#8a867f] max-w-xs truncate mt-1">{item.deferralReason ?? item.lastError}</div>}</td><td className="px-5 py-4 text-sm text-[#69665f] whitespace-nowrap">{timestamp ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp)) : '—'}</td><td className="px-5 py-4"><Status status={item.status} /></td><td className="px-5 py-4 text-right">{item.status === 'SENT' && item.previewUrl ? <a className="inline-flex gap-1 text-sm font-semibold underline" href={item.previewUrl} target="_blank" rel="noreferrer">Preview <ExternalLink size={14} /></a> : <span className="text-[#aaa69e]">—</span>}</td></tr>; })}</tbody></table></div>}
           <footer className="border-t border-[#e5e3dd] px-5 py-4 flex items-center justify-between text-sm"><span className="text-[#77746d]">{total ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}` : '0 results'}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage((v) => v - 1)} className="size-9 rounded-lg border border-[#d8d5ce] grid place-items-center disabled:opacity-30"><ChevronLeft size={17} /></button><span className="px-3 py-2">{page} / {pages}</span><button disabled={page >= pages} onClick={() => setPage((v) => v + 1)} className="size-9 rounded-lg border border-[#d8d5ce] grid place-items-center disabled:opacity-30"><ChevronRight size={17} /></button></div></footer>
         </div>
       </section>
     </main>
-    {compose && <Compose senders={senders} onClose={() => setCompose(false)} onScheduled={() => { setCompose(false); setToast('Campaign committed. Queue publication is running in the background.'); setTab('scheduled'); setPage(1); window.setTimeout(() => { void load(); setToast(''); }, 1500); }} />}
+    {compose && <Compose senders={senders} onClose={() => setCompose(false)} onScheduled={() => { setCompose(false); setToast('Campaign committed. Queue publication is running in the background.'); setTab('scheduled'); setPage(1); window.setTimeout(() => setToast(''), 1500); }} />}
   </div>;
 }
 

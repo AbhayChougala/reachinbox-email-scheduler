@@ -5,7 +5,7 @@ export function buildEmailSearch(input: {
   page: number;
   pageSize: number;
 }) {
-  const statuses = input.tab === 'sent' ? ['SENT', 'FAILED', 'AMBIGUOUS'] : ['SCHEDULED', 'QUEUED', 'SENDING'];
+  const statuses = input.tab === 'sent' ? ['SENT', 'FAILED'] : ['SCHEDULED', 'QUEUED', 'SENDING'];
   const contentQuery = input.q
     ? { multi_match: { query: input.q, fields: ['recipient^3', 'subject^2', 'body'] } }
     : { match_all: {} };

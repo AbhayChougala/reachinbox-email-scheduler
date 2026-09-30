@@ -4,8 +4,8 @@ A full-stack, owner-scoped email scheduling application for the Outbox Labs hiri
 
 ## Submission links
 
-- Temporary laptop-backed demo: `https://administrative-sept-columbus-pitch.trycloudflare.com` (accountless Quick Tunnel; **not** a production deployment and may expire).
-- Production deployment: not configured; see [deployment inputs](docs/deployment.md#minimum-deployment-inputs-still-required).
+- Temporary laptop-backed demo: `https://excited-magnitude-checklist-neither.trycloudflare.com` (accountless Quick Tunnel; **not** a production deployment and may expire).
+- Production deployment: prepared for one Google Compute Engine VM but blocked on Free Trial/credit confirmation and an account-controlled hostname; see the [exact GCP runbook](docs/gcp-compute-engine.md).
 - Demo video: not recorded/provided yet.
 
 ## What runs where
@@ -100,7 +100,7 @@ Google, Slack and Ethereal require credentials and user consent; automated tests
 
 ## Deployment
 
-An always-on Compose stack, persistent volumes, separate API/worker restarts, Caddy HTTPS, exact callback URLs, migrations and deployed SMTP connectivity checks are documented in [docs/deployment.md](docs/deployment.md). A static-only host is intentionally unsupported because BullMQ needs an always-running worker.
+An always-on Compose stack, persistent volumes, separate API/worker restarts, Caddy HTTPS, exact callback paths, migrations and deployed SMTP connectivity checks are documented in [docs/deployment.md](docs/deployment.md). The [Compute Engine runbook](docs/gcp-compute-engine.md) gives the Free Trial gate, exact Cloud Shell commands, fresh-data policy, free-hostname preflight, and cleanup commands. A static-only host is intentionally unsupported because BullMQ needs an always-running worker.
 
 ## Evidence matrix
 
@@ -113,10 +113,10 @@ An always-on Compose stack, persistent volumes, separate API/worker restarts, Ca
 | SMTP retries/ambiguity/idempotency | `apps/worker/src/processors.ts`, policy tests, `npm run smoke:ethereal` | Verified with real Ethereal acceptance and preview |
 | Google OIDC/session ownership | `apps/api/src/auth.ts`, protected/owner-scoped routes | Live verified through real Google consent |
 | Slack OAuth/threshold dedupe | Real OAuth to `AB work → #scheduler-alert`; webhook accepted exactly once; automated dedupe/reconnect coverage | Live provider acceptance; visible-channel confirmation pending |
-| Elasticsearch/versioned indexing | Owner-filtered API search returned both live deferred and sent documents | Live verified on Elasticsearch 9.1.4 |
+| Elasticsearch/versioned indexing | Owner-filtered API search returned live scheduled/sent documents; tab/query/page identity prevents stale responses crossing views | Live API verified on Elasticsearch 9.1.4; UI regression tested |
 | Bull Board admin authorization | `/admin/queues` returns 401 anonymously and 403 for the current non-admin | Protection live verified; authorized view needs `ADMIN_EMAILS` |
 | Dashboard/CSV/timezone/pagination | Parser tests plus empty/typed search-control checks at desktop and narrow widths | Functionally and visually verified; Figma pixel match blocked by unavailable frames |
-| Local/production operations | both Compose files, Dockerfile, Caddyfile, health endpoints | Implemented |
+| Local/production operations | both Compose files, Dockerfile, Caddyfile, dependency health checks, fresh-data GCP runbook | Built and locally validated; public VM deployment blocked on cloud access |
 
 The current verification commands and evidence are tracked in [docs/requirements-checklist.md](docs/requirements-checklist.md). Real Google login, Slack OAuth, Slack webhook acceptance, Ethereal acceptance/preview, Elasticsearch search, durable restart recovery, and service readiness have been live verified. Slack channel visibility still requires human confirmation; an accepted webhook response alone is not described as visible delivery.
 

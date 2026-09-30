@@ -1,6 +1,6 @@
 import { encryptSecret, getConfig, prisma } from '../packages/shared/src/index.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 process.env.ETHEREAL_CACHE = 'no';
 const nodemailer = (await import('nodemailer')).default;
 const env = getConfig();

@@ -1,6 +1,6 @@
 import { createRedis, getConfig, prisma } from '../packages/shared/src/index.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 const env = getConfig();
 const redis = createRedis(env.REDIS_URL);
 

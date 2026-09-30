@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:17-alpine
-    env_file: .env
     environment:
       POSTGRES_DB: reachinbox
       POSTGRES_USER: reachinbox
@@ -12,10 +11,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 10s
     restart: unless-stopped
   redis:
     image: redis:7.4-alpine
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
     volumes: ["redis_data:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -50,6 +50,7 @@ services:
     command: ["node", "apps/api/dist/server.js"]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }
     healthcheck:
@@ -59,21 +60,24 @@ services:
       retries: 12
       start_period: 20s
     restart: unless-stopped
+    stop_grace_period: 30s
   worker:
     build: .
     env_file: .env
     command: ["node", "apps/worker/dist/worker.js"]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "node", "--input-type=module", "-e", "import Redis from 'ioredis';const r=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});r.ping().then(v=>{r.disconnect();process.exit(v==='PONG'?0:1)}).catch(()=>{r.disconnect();process.exit(1)})"]
+      test: ["CMD", "node", "scripts/worker-healthcheck.mjs"]
       interval: 15s
       timeout: 5s
       retries: 12
       start_period: 20s
     restart: unless-stopped
+    stop_grace_period: 30s
   caddy:
     image: caddy:2.10-alpine
     environment: { APP_DOMAIN: "${APP_DOMAIN}" }
@@ -84,6 +88,12 @@ services:
       - caddy_config:/config
     depends_on:
       api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 volumes:
   postgres_data:

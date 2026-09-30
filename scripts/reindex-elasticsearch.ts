@@ -1,7 +1,7 @@
 import { Client } from '@elastic/elasticsearch';
 import { getConfig, prisma } from '../packages/shared/src/index.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 const env = getConfig();
 const client = new Client({ node: env.ELASTICSEARCH_URL });
 let cursor: string | undefined;

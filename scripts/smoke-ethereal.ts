@@ -5,7 +5,7 @@ import { scheduleCampaign } from '../apps/api/src/schedule.ts';
 import { startOutboxDispatcher } from '../apps/api/src/outbox.ts';
 import { createEmailProcessor, createIndexProcessor } from '../apps/worker/src/processors.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 const env = getConfig();
 const ownerEmail = process.env.PROVISION_OWNER_EMAIL?.trim().toLowerCase();
 if (!ownerEmail) throw new Error('PROVISION_OWNER_EMAIL is required');

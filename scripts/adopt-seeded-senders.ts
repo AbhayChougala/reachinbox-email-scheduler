@@ -1,6 +1,6 @@
 import { prisma } from '../packages/shared/src/index.ts';
 
-process.loadEnvFile?.('.env');
+try { process.loadEnvFile?.('.env'); } catch (error) { void error; }
 
 const googleOwners = await prisma.user.findMany({
   where: { googleSubject: { not: null } },
