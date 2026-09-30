@@ -2,6 +2,12 @@
 
 A full-stack, owner-scoped email scheduling application for the Outbox Labs hiring assignment. It commits campaigns to PostgreSQL, recovers queue publication through a transactional outbox, schedules one durable BullMQ job per recipient, enforces sender-wide limits atomically in Redis, sends through persistent Ethereal accounts, indexes state in Elasticsearch, and notifies Slack when a sender reaches its real UTC-hour cap.
 
+## Submission links
+
+- Temporary laptop-backed demo: `https://administrative-sept-columbus-pitch.trycloudflare.com` (accountless Quick Tunnel; **not** a production deployment and may expire).
+- Production deployment: not configured; see [deployment inputs](docs/deployment.md#minimum-deployment-inputs-still-required).
+- Demo video: not recorded/provided yet.
+
 ## What runs where
 
 | Service | Responsibility |
@@ -44,6 +50,15 @@ npm run dev
 ```
 
 Open `http://localhost:5173`. The API runs on `http://localhost:4000`. A user listed in `ADMIN_EMAILS` can open `http://localhost:4000/admin/queues` after Google login.
+
+For a single-origin HTTPS demo, start one Quick Tunnel pointing at Vite, then use its current origin with the guarded launcher:
+
+```bash
+cloudflared tunnel --url http://localhost:5173 --no-autoupdate --protocol http2
+DEV_HTTPS_ORIGIN=https://<current-tunnel-host> npm run dev:https
+```
+
+Register `https://<current-tunnel-host>/api/auth/google/callback` with Google and `https://<current-tunnel-host>/api/integrations/slack/callback` with Slack. Do not run `npm run dev` beside the guarded launcher; it refuses occupied ports so stale configuration cannot silently become the serving process.
 
 The provisioning script is explicit and repeatable, but Ethereal returns new accounts when rerun. Accounts are never recreated by normal API/worker restarts.
 
@@ -93,16 +108,16 @@ An always-on Compose stack, persistent volumes, separate API/worker restarts, Ca
 | --- | --- | --- |
 | PostgreSQL authority and migration | `prisma/schema.prisma`, committed SQL migration | Verified on PostgreSQL 17 |
 | Transactional scheduling/idempotency | `apps/api/src/schedule.ts`, unit/integration suite | Verified |
-| Crash-safe queue publication | `apps/api/src/outbox.ts`, stale-claim/restart integration test | Implemented |
-| Shared concurrency/rate limits | Redis Lua in `packages/shared/src/rate-limit.ts`, racing-worker integration tests | Implemented |
+| Crash-safe queue publication | `apps/api/src/outbox.ts`, stale-claim test and real delayed-job process restart | Live verified |
+| Shared concurrency/rate limits | Redis Lua plus real cap-2 campaign: two accepted, third moved to the next UTC hour | Live verified |
 | SMTP retries/ambiguity/idempotency | `apps/worker/src/processors.ts`, policy tests, `npm run smoke:ethereal` | Verified with real Ethereal acceptance and preview |
 | Google OIDC/session ownership | `apps/api/src/auth.ts`, protected/owner-scoped routes | Live verified through real Google consent |
-| Slack OAuth/threshold dedupe | `apps/api/src/slack.ts`, user-bound OAuth-state tests, worker notification event, reconnect test | Implemented and automatically tested; live Slack consent pending |
-| Elasticsearch/versioned indexing | setup/reindex scripts, index worker, owner-filter test | Verified on Elasticsearch 9.1.4 |
-| Bull Board admin authorization | `/admin/queues` + `ADMIN_EMAILS` middleware | Implemented |
-| Dashboard/CSV/timezone/pagination | `apps/web`, parser tests | Implemented; Figma pixel match blocked by inaccessible frames |
+| Slack OAuth/threshold dedupe | Real OAuth to `AB work → #scheduler-alert`; webhook accepted exactly once; automated dedupe/reconnect coverage | Live provider acceptance; visible-channel confirmation pending |
+| Elasticsearch/versioned indexing | Owner-filtered API search returned both live deferred and sent documents | Live verified on Elasticsearch 9.1.4 |
+| Bull Board admin authorization | `/admin/queues` returns 401 anonymously and 403 for the current non-admin | Protection live verified; authorized view needs `ADMIN_EMAILS` |
+| Dashboard/CSV/timezone/pagination | Parser tests plus empty/typed search-control checks at desktop and narrow widths | Functionally and visually verified; Figma pixel match blocked by unavailable frames |
 | Local/production operations | both Compose files, Dockerfile, Caddyfile, health endpoints | Implemented |
 
-The current verification commands and evidence are tracked in [docs/requirements-checklist.md](docs/requirements-checklist.md). Real Google login, Ethereal acceptance/preview, Elasticsearch, and service readiness have been live verified. Slack posting remains credential/consent-blocked and is not claimed as live-verified.
+The current verification commands and evidence are tracked in [docs/requirements-checklist.md](docs/requirements-checklist.md). Real Google login, Slack OAuth, Slack webhook acceptance, Ethereal acceptance/preview, Elasticsearch search, durable restart recovery, and service readiness have been live verified. Slack channel visibility still requires human confirmation; an accepted webhook response alone is not described as visible delivery.
 
 See [docs/requirements-checklist.md](docs/requirements-checklist.md) for the concise checklist, [docs/demo-script.md](docs/demo-script.md) for a sub-five-minute walkthrough, and [docs/tradeoffs.md](docs/tradeoffs.md) for review-ready design decisions.

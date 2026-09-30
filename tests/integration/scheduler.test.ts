@@ -17,7 +17,6 @@ integration('persistent scheduling and concurrency', () => {
   let senderId: string;
 
   beforeAll(async () => {
-    await redis.flushdb();
     const owner = await prisma.user.create({ data: { email: `owner-${crypto.randomUUID()}@example.com`, name: 'Owner' } });
     const other = await prisma.user.create({ data: { email: `other-${crypto.randomUUID()}@example.com`, name: 'Other' } });
     ids.push(owner.id, other.id); ownerId = owner.id; otherOwnerId = other.id;
@@ -45,7 +44,6 @@ integration('persistent scheduling and concurrency', () => {
   });
 
   it('atomically gives one racing worker the sender last slot across campaigns', async () => {
-    await redis.flushdb();
     const common = { senderId: `race-${crypto.randomUUID()}`, senderHourlyLimit: 1, campaignHourlyLimit: 10, minIntervalMs: 0 };
     const [a, b] = await Promise.all([
       admitSend(redis, { ...common, campaignId: 'campaign-a' }),
@@ -55,7 +53,6 @@ integration('persistent scheduling and concurrency', () => {
   });
 
   it('enforces minimum spacing and sender-wide quota across campaigns', async () => {
-    await redis.flushdb();
     const testSender = `limit-${crypto.randomUUID()}`;
     const one = await admitSend(redis, { senderId: testSender, campaignId: 'a', senderHourlyLimit: 2, campaignHourlyLimit: 2, minIntervalMs: 500 });
     const spaced = await admitSend(redis, { senderId: testSender, campaignId: 'b', senderHourlyLimit: 2, campaignHourlyLimit: 2, minIntervalMs: 500 });
@@ -85,7 +82,6 @@ integration('persistent scheduling and concurrency', () => {
   });
 
   it('delays rate-limited work without creating an SMTP attempt', async () => {
-    await redis.flushdb();
     const scheduled = await scheduleCampaign(ownerId, `delayed-${crypto.randomUUID()}`, { senderId, subject: 'Delay me', body: 'Body', recipients: ['delay@example.com'], startAtUtc: new Date().toISOString(), timezone: 'UTC', delaySeconds: 0, hourlyLimit: 1 });
     const message = await prisma.emailMessage.findFirstOrThrow({ where: { campaignId: scheduled.campaign.id } });
     await admitSend(redis, { senderId, campaignId: scheduled.campaign.id, senderHourlyLimit: 1, campaignHourlyLimit: 1, minIntervalMs: 0 });
