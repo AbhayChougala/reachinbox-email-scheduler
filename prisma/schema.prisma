@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MessageStatus {
+  SCHEDULED
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  AMBIGUOUS
+  CANCELLED
+}
+
+enum AttemptOutcome {
+  STARTED
+  SENT
+  RETRYABLE_FAILURE
+  PERMANENT_FAILURE
+  AMBIGUOUS
+}
+
+enum OutboxKind {
+  EMAIL_ENQUEUE
+  EMAIL_INDEX
+  SLACK_NOTIFY
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  googleSubject      String?             @unique
+  email              String              @unique
+  name               String
+  avatarUrl          String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  senders             Sender[]
+  campaigns           Campaign[]
+  messages            EmailMessage[]
+  scheduleRequests    ScheduleRequest[]
+  slackIntegration    SlackIntegration?
+  slackNotifications  SlackNotification[]
+}
+
+model Sender {
+  id                  String              @id @default(cuid())
+  ownerId             String
+  owner               User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name                String
+  email               String
+  smtpHost             String
+  smtpPort             Int
+  smtpSecure           Boolean             @default(false)
+  smtpUsernameEnc      String
+  smtpPasswordEnc      String
+  minIntervalMs        Int                 @default(1000)
+  hourlyLimit          Int                 @default(100)
+  enabled              Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  campaigns            Campaign[]
+  messages             EmailMessage[]
+  slackNotifications   SlackNotification[]
+
+  @@unique([ownerId, email])
+  @@index([ownerId])
+}
+
+model Campaign {
+  id                  String          @id @default(cuid())
+  ownerId             String
+  owner               User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  senderId            String
+  sender              Sender          @relation(fields: [senderId], references: [id])
+  subject             String
+  body                String
+  startAt             DateTime
+  timezone            String
+  delayMs             Int
+  hourlyLimit         Int
+  recipientCount      Int
+  createdAt           DateTime        @default(now())
+  messages            EmailMessage[]
+  scheduleRequest     ScheduleRequest?
+
+  @@index([ownerId, createdAt])
+}
+
+model EmailMessage {
+  id                  String          @id @default(cuid())
+  ownerId             String
+  owner               User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  campaignId          String
+  campaign            Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  senderId            String
+  sender              Sender          @relation(fields: [senderId], references: [id])
+  recipient           String
+  recipientOrder      Int
+  subject             String
+  body                String
+  originalScheduledAt DateTime
+  effectiveScheduledAt DateTime
+  deferralReason      String?
+  status              MessageStatus   @default(SCHEDULED)
+  statusVersion       Int             @default(1)
+  sendingStartedAt    DateTime?
+  sentAt              DateTime?
+  smtpMessageId       String?
+  previewUrl          String?
+  lastError           String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  attempts            SendAttempt[]
+
+  @@unique([campaignId, recipientOrder])
+  @@index([ownerId, status, effectiveScheduledAt])
+  @@index([senderId, status])
+}
+
+model SendAttempt {
+  id                  String          @id @default(cuid())
+  messageId           String
+  message             EmailMessage    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  attemptNumber       Int
+  outcome             AttemptOutcome
+  errorCode           String?
+  errorMessage        String?
+  smtpResponse        String?
+  startedAt           DateTime        @default(now())
+  finishedAt          DateTime?
+
+  @@unique([messageId, attemptNumber])
+  @@index([messageId])
+}
+
+model ScheduleRequest {
+  id                  String          @id @default(cuid())
+  ownerId             String
+  owner               User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  idempotencyKey      String
+  payloadFingerprint  String
+  campaignId          String          @unique
+  campaign            Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdAt           DateTime        @default(now())
+
+  @@unique([ownerId, idempotencyKey])
+}
+
+model OutboxEvent {
+  id                  String          @id @default(cuid())
+  kind                OutboxKind
+  aggregateId         String
+  payload             Json
+  status              OutboxStatus    @default(PENDING)
+  attempts            Int             @default(0)
+  availableAt         DateTime        @default(now())
+  claimedAt           DateTime?
+  publishedAt         DateTime?
+  lastError           String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([kind, aggregateId])
+  @@index([status, availableAt])
+}
+
+model SlackIntegration {
+  id                  String          @id @default(cuid())
+  ownerId             String          @unique
+  owner               User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  teamId              String
+  teamName            String
+  channelId           String
+  channelName         String
+  webhookUrlEnc       String
+  botTokenEnc         String?
+  enabled             Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+model SlackNotification {
+  id                  String              @id @default(cuid())
+  ownerId             String
+  owner               User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  senderId            String
+  sender              Sender              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  utcHour             DateTime
+  cap                 Int
+  nextEligibleAt      DateTime
+  status              NotificationStatus  @default(PENDING)
+  attempts            Int                 @default(0)
+  lastError           String?
+  sentAt              DateTime?
+  createdAt           DateTime            @default(now())
+
+  @@unique([ownerId, senderId, utcHour])
+  @@index([status, createdAt])
+}

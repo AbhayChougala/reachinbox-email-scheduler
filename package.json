@@ -1,0 +1,50 @@
+{
+  "name": "reachinbox-email-scheduler",
+  "type": "module",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n web,api,worker -c cyan,green,magenta \"npm run dev -w @reachinbox/web\" \"npm run dev -w @reachinbox/api\" \"npm run dev -w @reachinbox/worker\"",
+    "build": "npm run build -w @reachinbox/shared && npm run build -w @reachinbox/api && npm run build -w @reachinbox/worker && npm run build -w @reachinbox/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:integration": "RUN_INTEGRATION=1 vitest run tests/integration",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed:senders": "tsx scripts/provision-ethereal.ts",
+    "smoke:ethereal": "tsx scripts/smoke-ethereal.ts",
+    "search:setup": "tsx scripts/setup-elasticsearch.ts",
+    "search:reindex": "tsx scripts/reindex-elasticsearch.ts"
+  },
+  "devDependencies": {
+    "@elastic/elasticsearch": "^9.1.0",
+    "@eslint/js": "^10.0.1",
+    "@prisma/client": "6.12.0",
+    "@types/node": "^24.5.2",
+    "@types/nodemailer": "^7.0.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.11.0",
+    "nodemailer": "^10.0.13",
+    "prisma": "6.12.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "prisma@6.12.0": true,
+    "@prisma/engines@6.12.0": true,
+    "@prisma/client@6.12.0": true,
+    "esbuild@0.28.2": true,
+    "msgpackr-extract@3.0.4": true
+  }
+}

@@ -1,0 +1,40 @@
+openapi: 3.1.0
+info: { title: ReachInbox Scheduler API, version: 1.0.0 }
+servers: [{ url: http://localhost:4000 }]
+paths:
+  /api/auth/google:
+    get: { summary: Begin Google OIDC login, responses: { '302': { description: Redirect } } }
+  /api/me:
+    get: { summary: Current authenticated user, responses: { '200': { description: User }, '401': { description: Not authenticated } } }
+  /api/senders:
+    get: { summary: List owner-scoped sender metadata, responses: { '200': { description: Sender list } } }
+  /api/campaigns/schedule:
+    post:
+      summary: Idempotently schedule one message per recipient
+      parameters: [{ in: header, name: Idempotency-Key, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Schedule' } } } }
+      responses: { '201': { description: Created }, '200': { description: Idempotent replay }, '409': { description: Key reused with different content } }
+  /api/emails:
+    get:
+      summary: Owner-filtered Elasticsearch search
+      parameters:
+        - { in: query, name: tab, schema: { type: string, enum: [scheduled, sent] } }
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer, minimum: 1 } }
+      responses: { '200': { description: Search page }, '503': { description: Elasticsearch unavailable } }
+  /api/integrations/slack/connect:
+    get: { summary: Begin Slack incoming-webhook OAuth, responses: { '302': { description: Redirect } } }
+components:
+  schemas:
+    Schedule:
+      type: object
+      required: [senderId, subject, body, recipients, startAtUtc, timezone, delaySeconds, hourlyLimit]
+      properties:
+        senderId: { type: string }
+        subject: { type: string, maxLength: 200 }
+        body: { type: string }
+        recipients: { type: array, items: { type: string, format: email } }
+        startAtUtc: { type: string, format: date-time }
+        timezone: { type: string, example: Asia/Kolkata }
+        delaySeconds: { type: integer, minimum: 0 }
+        hourlyLimit: { type: integer, minimum: 1 }
