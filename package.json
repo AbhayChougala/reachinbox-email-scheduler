@@ -22,6 +22,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed:senders": "tsx scripts/provision-ethereal.ts",
+    "db:rotate:senders": "tsx scripts/rotate-ethereal-senders.ts",
     "db:adopt-senders": "tsx scripts/adopt-seeded-senders.ts",
     "demo:configure-rate-limit": "tsx scripts/configure-rate-limit-demo.ts",
     "smoke:ethereal": "tsx scripts/smoke-ethereal.ts",

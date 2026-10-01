@@ -104,6 +104,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
 
 function Dashboard({ user }: { user: User }) {
   const [senders, setSenders] = useState<SenderAccount[]>([]);
+  const [senderSetup, setSenderSetup] = useState<'loading' | 'provisioning' | 'ready' | 'error'>('loading');
   const [tab, setTab] = useState<'scheduled' | 'sent'>('scheduled');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -138,7 +139,21 @@ function Dashboard({ user }: { user: User }) {
       setResults({ key, items: [], total: 0, error: e instanceof Error ? e.message : 'Could not load email index', loading: false });
     }
   }
-  useEffect(() => { void Promise.all([api<{ senders: SenderAccount[] }>('/api/senders').then((d) => setSenders(d.senders)), api<{ integration: Slack }>('/api/integrations/slack').then((d) => setSlack(d.integration))]); }, []);
+  async function loadSenders() {
+    setSenderSetup('loading');
+    try {
+      let data = await api<{ senders: SenderAccount[] }>('/api/senders');
+      if (!data.senders.length) {
+        setSenderSetup('provisioning');
+        data = await api<{ senders: SenderAccount[] }>('/api/senders/provision', { method: 'POST' });
+      }
+      setSenders(data.senders);
+      setSenderSetup('ready');
+    } catch {
+      setSenderSetup('error');
+    }
+  }
+  useEffect(() => { void Promise.all([loadSenders(), api<{ integration: Slack }>('/api/integrations/slack').then((d) => setSlack(d.integration))]); }, []);
   useEffect(() => {
     const controller = new AbortController();
     void load(view, controller.signal);
@@ -154,7 +169,8 @@ function Dashboard({ user }: { user: User }) {
     </aside>
     <main className="min-w-0"><header className="px-5 lg:px-10 py-7 lg:py-9 flex flex-col sm:flex-row sm:items-end justify-between gap-5 border-b border-[#dedcd5]"><div><p className="text-xs font-bold tracking-[.15em] text-[#8a867f] mb-2">EMAIL OPERATIONS</p><h1 className="text-3xl lg:text-4xl font-semibold tracking-[-.035em]">Your outbox</h1><p className="text-[#77746d] mt-2">Schedule deliberately. Delivery keeps moving after you close this tab.</p></div><button onClick={() => setCompose(true)} disabled={!senders.length} className="rounded-xl bg-black text-white px-5 py-3 font-semibold flex items-center justify-center gap-2 disabled:opacity-50"><Plus size={18} /> Compose new email</button></header>
       <section className="p-5 lg:p-10">
-        {!senders.length && <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">No sender account exists yet. Run <code className="font-bold">npm run db:seed:senders</code> after setting PROVISION_OWNER_EMAIL to your Google email.</div>}
+        {senderSetup === 'provisioning' && <div className="mb-5 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800"><LoaderCircle className="shrink-0 animate-spin" size={18} />Setting up two private Ethereal test senders for this account…</div>}
+        {senderSetup === 'error' && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><span>Sender setup could not be completed. Your account and existing data are safe.</span><button type="button" onClick={() => void loadSenders()} className="rounded-lg border border-amber-300 bg-white px-3 py-2 font-semibold">Try setup again</button></div>}
         {toast && <div className="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 flex gap-2"><Check size={19} /> {toast}</div>}
         <div className="flex flex-col xl:flex-row gap-4 justify-between xl:items-center mb-5"><div className="inline-flex bg-[#e8e6df] rounded-xl p-1 self-start"><button onClick={() => { setTab('scheduled'); setPage(1); }} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${tab === 'scheduled' ? 'bg-white shadow-sm' : 'text-[#77746d]'}`}><Clock3 size={16} /> Scheduled emails</button><button onClick={() => { setTab('sent'); setPage(1); }} className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${tab === 'sent' ? 'bg-white shadow-sm' : 'text-[#77746d]'}`}><Send size={16} /> Sent emails</button></div><div className="flex w-full flex-wrap items-center gap-3 xl:w-auto"><SearchField value={search} onChange={setSearch} />{slack?.enabled ? <button onClick={() => void api('/api/integrations/slack', { method: 'DELETE' }).then(() => setSlack(null))} className="flex max-w-full min-w-0 items-center gap-2 rounded-xl border border-[#d7d4cc] bg-white px-4 py-2.5 text-sm font-semibold"><Bell className="shrink-0" size={16} /> <span className="min-w-0 truncate">{slack.teamName} · {formatSlackChannel(slack.channelName)}</span> <X className="shrink-0" size={14} /></button> : <a href="/api/integrations/slack/connect" className="rounded-xl border border-[#d7d4cc] bg-white px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2"><Link2 size={16} /> Connect Slack</a>}</div></div>
         <div className="rounded-2xl bg-white border border-[#dfddd6] overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,.03)]">

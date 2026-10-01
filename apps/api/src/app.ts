@@ -16,6 +16,7 @@ import { beginGoogle, finishGoogle, requireAdmin, requireUser } from './auth.js'
 import { logger } from './logger.js';
 import { IdempotencyConflictError, scheduleCampaign } from './schedule.js';
 import { buildEmailSearch } from './search.js';
+import { provisionEtherealSenders } from './senders.js';
 import { beginSlack, finishSlack } from './slack.js';
 
 export function createApp(redis: Redis, elastic: ElasticsearchClient) {
@@ -63,6 +64,14 @@ export function createApp(redis: Redis, elastic: ElasticsearchClient) {
   app.get('/api/senders', requireUser, async (req, res) => {
     const senders = await prisma.sender.findMany({ where: { ownerId: req.session.userId, enabled: true }, select: { id: true, name: true, email: true, minIntervalMs: true, hourlyLimit: true }, orderBy: { createdAt: 'asc' } });
     res.json({ senders });
+  });
+  app.post('/api/senders/provision', requireUser, async (req, res, next) => {
+    try {
+      const senders = await provisionEtherealSenders(req.session.userId!);
+      res.json({ senders });
+    } catch (error) {
+      next(error);
+    }
   });
   app.post('/api/campaigns/schedule', requireUser, async (req, res, next) => {
     const key = req.get('Idempotency-Key');
