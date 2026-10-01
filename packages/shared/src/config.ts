@@ -41,9 +41,26 @@ export type AppConfig = z.infer<typeof schema> & { adminEmails: Set<string> };
 
 let cached: AppConfig | undefined;
 
+export function resolveRuntimeEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const resolved = { ...source };
+  const renderHostname = source.RENDER_EXTERNAL_HOSTNAME?.trim();
+  if (renderHostname) {
+    const renderOrigin = new URL(`https://${renderHostname}`).origin;
+    resolved.WEB_ORIGIN ||= renderOrigin;
+    resolved.PUBLIC_ORIGIN ||= renderOrigin;
+    resolved.GOOGLE_REDIRECT_URI ||= new URL('/api/auth/google/callback', renderOrigin).href;
+    resolved.SLACK_REDIRECT_URI ||= new URL('/api/integrations/slack/callback', renderOrigin).href;
+  }
+  const elasticsearchHostport = source.RENDER_ELASTICSEARCH_HOSTPORT?.trim();
+  if (!resolved.ELASTICSEARCH_URL && elasticsearchHostport) {
+    resolved.ELASTICSEARCH_URL = new URL(`http://${elasticsearchHostport}`).origin;
+  }
+  return resolved;
+}
+
 export function getConfig(): AppConfig {
   if (cached) return cached;
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(resolveRuntimeEnv(process.env));
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
     throw new Error(`Invalid configuration: ${issues}`);

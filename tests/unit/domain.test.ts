@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decryptSecret, encryptSecret, fingerprint, normalizeAndValidateRecipients, scheduleSchema } from '../../packages/shared/src/index.ts';
+import { decryptSecret, encryptSecret, fingerprint, normalizeAndValidateRecipients, resolveRuntimeEnv, scheduleSchema } from '../../packages/shared/src/index.ts';
 import { parseLeadText } from '../../apps/web/src/leads.ts';
 import { buildEmailSearch } from '../../apps/api/src/search.ts';
 import { classifySmtpError } from '../../apps/worker/src/processors.ts';
@@ -39,6 +39,39 @@ describe('security and request identity', () => {
     const base = { senderId: 's', subject: 'Hello', body: 'Body', recipients: ['a@example.com'], timezone: 'Asia/Kolkata', delaySeconds: 1, hourlyLimit: 2 };
     expect(scheduleSchema.safeParse({ ...base, startAtUtc: '2026-10-01T07:00:00.000Z' }).success).toBe(true);
     expect(scheduleSchema.safeParse({ ...base, startAtUtc: '2026-10-01T12:30' }).success).toBe(false);
+  });
+});
+
+describe('Render runtime configuration', () => {
+  it('derives same-origin OAuth callbacks and the private Elasticsearch URL', () => {
+    const resolved = resolveRuntimeEnv({
+      RENDER_EXTERNAL_HOSTNAME: 'reachinbox-scheduler.onrender.com',
+      RENDER_ELASTICSEARCH_HOSTPORT: 'reachinbox-elasticsearch:9200'
+    });
+    expect(resolved.WEB_ORIGIN).toBe('https://reachinbox-scheduler.onrender.com');
+    expect(resolved.PUBLIC_ORIGIN).toBe('https://reachinbox-scheduler.onrender.com');
+    expect(resolved.GOOGLE_REDIRECT_URI).toBe('https://reachinbox-scheduler.onrender.com/api/auth/google/callback');
+    expect(resolved.SLACK_REDIRECT_URI).toBe('https://reachinbox-scheduler.onrender.com/api/integrations/slack/callback');
+    expect(resolved.ELASTICSEARCH_URL).toBe('http://reachinbox-elasticsearch:9200');
+  });
+
+  it('preserves explicit non-Render configuration', () => {
+    const resolved = resolveRuntimeEnv({
+      RENDER_EXTERNAL_HOSTNAME: 'reachinbox-scheduler.onrender.com',
+      WEB_ORIGIN: 'https://mail.example.com',
+      PUBLIC_ORIGIN: 'https://mail.example.com',
+      GOOGLE_REDIRECT_URI: 'https://mail.example.com/api/auth/google/callback',
+      SLACK_REDIRECT_URI: 'https://mail.example.com/api/integrations/slack/callback',
+      ELASTICSEARCH_URL: 'http://elasticsearch.example:9200',
+      RENDER_ELASTICSEARCH_HOSTPORT: 'reachinbox-elasticsearch:9200'
+    });
+    expect(resolved).toMatchObject({
+      WEB_ORIGIN: 'https://mail.example.com',
+      PUBLIC_ORIGIN: 'https://mail.example.com',
+      GOOGLE_REDIRECT_URI: 'https://mail.example.com/api/auth/google/callback',
+      SLACK_REDIRECT_URI: 'https://mail.example.com/api/integrations/slack/callback',
+      ELASTICSEARCH_URL: 'http://elasticsearch.example:9200'
+    });
   });
 });
 

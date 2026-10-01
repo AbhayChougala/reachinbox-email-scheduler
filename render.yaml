@@ -1,0 +1,188 @@
+services:
+  - type: keyvalue
+    name: reachinbox-redis
+    region: singapore
+    plan: 256mb
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot
+
+  - type: pserv
+    name: reachinbox-elasticsearch
+    runtime: image
+    region: singapore
+    plan: 1c-2g
+    numInstances: 1
+    image:
+      url: docker.elastic.co/elasticsearch/elasticsearch:9.1.4
+    envVars:
+      - key: discovery.type
+        value: single-node
+      - key: xpack.security.enabled
+        value: "false"
+      - key: ES_JAVA_OPTS
+        value: -Xms1g -Xmx1g
+    disk:
+      name: elasticsearch-data
+      mountPath: /usr/share/elasticsearch/data
+      sizeGB: 10
+
+  - type: web
+    name: reachinbox-scheduler
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    preDeployCommand: npm run db:migrate && npm run search:setup
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reachinbox-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: reachinbox-redis
+          property: connectionString
+      - key: RENDER_ELASTICSEARCH_HOSTPORT
+        fromService:
+          type: pserv
+          name: reachinbox-elasticsearch
+          property: hostport
+      - key: ELASTICSEARCH_INDEX
+        value: reachinbox-emails-v1
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTEGRATION_ENCRYPTION_KEY
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SLACK_CLIENT_ID
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: PROVISION_OWNER_EMAIL
+        sync: false
+      - key: PROVISION_OWNER_NAME
+        sync: false
+      - key: WORKER_CONCURRENCY
+        value: "10"
+      - key: OUTBOX_POLL_MS
+        value: "5000"
+      - key: OUTBOX_BATCH_SIZE
+        value: "100"
+      - key: SMTP_MAX_ATTEMPTS
+        value: "3"
+      - key: DEFAULT_SENDER_MIN_INTERVAL_MS
+        value: "1000"
+      - key: DEFAULT_SENDER_HOURLY_LIMIT
+        value: "100"
+      - key: MAX_CAMPAIGN_RECIPIENTS
+        value: "5000"
+
+  - type: worker
+    name: reachinbox-worker
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node apps/worker/dist/worker.js
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reachinbox-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: reachinbox-redis
+          property: connectionString
+      - key: RENDER_ELASTICSEARCH_HOSTPORT
+        fromService:
+          type: pserv
+          name: reachinbox-elasticsearch
+          property: hostport
+      - key: RENDER_EXTERNAL_HOSTNAME
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: ELASTICSEARCH_INDEX
+        value: reachinbox-emails-v1
+      - key: SESSION_SECRET
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: SESSION_SECRET
+      - key: INTEGRATION_ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: INTEGRATION_ENCRYPTION_KEY
+      - key: GOOGLE_CLIENT_ID
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: GOOGLE_CLIENT_ID
+      - key: GOOGLE_CLIENT_SECRET
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: GOOGLE_CLIENT_SECRET
+      - key: SLACK_CLIENT_ID
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: SLACK_CLIENT_ID
+      - key: SLACK_CLIENT_SECRET
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: SLACK_CLIENT_SECRET
+      - key: ADMIN_EMAILS
+        fromService:
+          type: web
+          name: reachinbox-scheduler
+          envVarKey: ADMIN_EMAILS
+      - key: WORKER_CONCURRENCY
+        value: "10"
+      - key: OUTBOX_POLL_MS
+        value: "5000"
+      - key: OUTBOX_BATCH_SIZE
+        value: "100"
+      - key: SMTP_MAX_ATTEMPTS
+        value: "3"
+      - key: DEFAULT_SENDER_MIN_INTERVAL_MS
+        value: "1000"
+      - key: DEFAULT_SENDER_HOURLY_LIMIT
+        value: "100"
+      - key: MAX_CAMPAIGN_RECIPIENTS
+        value: "5000"
+
+databases:
+  - name: reachinbox-postgres
+    region: singapore
+    plan: 0.1c-256mb
+    diskSizeGB: 5
+    storageAutoscalingEnabled: false
+    postgresMajorVersion: "17"
+    ipAllowList: []

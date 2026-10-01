@@ -5,7 +5,7 @@ A full-stack, owner-scoped email scheduling application for the Outbox Labs hiri
 ## Submission links
 
 - Temporary laptop-backed demo: `https://excited-magnitude-checklist-neither.trycloudflare.com` (accountless Quick Tunnel; **not** a production deployment and may expire).
-- Production deployment: prepared for one Google Compute Engine VM but blocked on Free Trial/credit confirmation and an account-controlled hostname; see the [exact GCP runbook](docs/gcp-compute-engine.md).
+- Production deployment: Render Blueprint prepared but not provisioned pending approval of the reviewed recurring cost; see the [Render runbook](docs/render.md).
 - Demo video: not recorded/provided yet.
 
 ## What runs where
@@ -100,7 +100,7 @@ Google, Slack and Ethereal require credentials and user consent; automated tests
 
 ## Deployment
 
-An always-on Compose stack, persistent volumes, separate API/worker restarts, Caddy HTTPS, exact callback paths, migrations and deployed SMTP connectivity checks are documented in [docs/deployment.md](docs/deployment.md). The [Compute Engine runbook](docs/gcp-compute-engine.md) gives the Free Trial gate, exact Cloud Shell commands, fresh-data policy, free-hostname preflight, and cleanup commands. A static-only host is intentionally unsupported because BullMQ needs an always-running worker.
+The reviewed [Render Blueprint](render.yaml) and [Render runbook](docs/render.md) define one same-origin web/API service, a separate always-running BullMQ worker, paid persistent Key Value, PostgreSQL, and private persistent Elasticsearch. The runbook includes the exact recurring-cost estimate, GitHub/import steps, OAuth callbacks, migrations, sender provisioning, and post-deploy verification. No Render resource has been provisioned. A static-only or free sleeping service is intentionally unsupported because SMTP and BullMQ require a continuously running worker.
 
 ## Evidence matrix
 
@@ -116,7 +116,7 @@ An always-on Compose stack, persistent volumes, separate API/worker restarts, Ca
 | Elasticsearch/versioned indexing | Owner-filtered API search returned live scheduled/sent documents; tab/query/page identity prevents stale responses crossing views | Live API verified on Elasticsearch 9.1.4; UI regression tested |
 | Bull Board admin authorization | `/admin/queues` returns 401 anonymously and 403 for the current non-admin | Protection live verified; authorized view needs `ADMIN_EMAILS` |
 | Dashboard/CSV/timezone/pagination | Parser tests plus empty/typed search-control checks at desktop and narrow widths | Functionally and visually verified; Figma pixel match blocked by unavailable frames |
-| Local/production operations | both Compose files, Dockerfile, Caddyfile, dependency health checks, fresh-data GCP runbook | Built and locally validated; public VM deployment blocked on cloud access |
+| Local/production operations | Dockerfile, Render Blueprint, Compose files, dependency health checks, and fresh-data Render runbook | Built and locally validated; paid Render provisioning awaits explicit cost approval |
 
 The current verification commands and evidence are tracked in [docs/requirements-checklist.md](docs/requirements-checklist.md). Real Google login, Slack OAuth, Slack webhook acceptance, Ethereal acceptance/preview, Elasticsearch search, durable restart recovery, and service readiness have been live verified. Slack channel visibility still requires human confirmation; an accepted webhook response alone is not described as visible delivery.
 
